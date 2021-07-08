@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Daydreamer&#39;s Blog</title>
+  
+  
+  <link href="http://example.com/atom.xml" rel="self"/>
+  
+  <link href="http://example.com/"/>
+  <updated>2021-05-30T12:57:04.629Z</updated>
+  <id>http://example.com/</id>
+  
+  <author>
+    <name>daydreamer</name>
+    
+  </author>
+  
+  <generator uri="https://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>2021 CISCN pwny复现</title>
+    <link href="http://example.com/2021/05/30/2021-CISCN-pwny%E5%A4%8D%E7%8E%B0/"/>
+    <id>http://example.com/2021/05/30/2021-CISCN-pwny%E5%A4%8D%E7%8E%B0/</id>
+    <published>2021-05-30T12:55:02.000Z</published>
+    <updated>2021-05-30T12:57:04.629Z</updated>
+    
+    
+      
+      
+        
+        
+    <summary type="html">&lt;p&gt;这个题保护全开了，先看一下各个函数吧&lt;/p&gt;
+&lt;p&gt;write函数：&lt;/p&gt;
+&lt;p&gt;整个write函数里面没有什么漏洞，就是一个可以往任意位置写入功能。&lt;/p&gt;
+&lt;figure class=&quot;highlight plaintext&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td</summary>
+        
+      
+    
+    
+    
+    
+  </entry>
+  
+  <entry>
+    <title>蓝帽杯slient</title>
+    <link href="http://example.com/2021/04/29/2021%20%E8%93%9D%E5%B8%BD%E6%9D%AF%20pwn%20slient/"/>
+    <id>http://example.com/2021/04/29/2021%20%E8%93%9D%E5%B8%BD%E6%9D%AF%20pwn%20slient/</id>
+    <published>2021-04-29T13:08:54.172Z</published>
+    <updated>2021-05-26T10:24:38.837Z</updated>
+    
+    
+    <summary type="html">&lt;blockquote&gt;
+&lt;p&gt;这道题不是第一个上的pwn题，第一道太难了，第二个一出来就去看第二个题了= =&lt;/p&gt;
+&lt;p&gt;一个沙箱绕过的题，以前没写过类似的，当场也没有写出来，于是复现一下。&lt;/p&gt;
+&lt;/blockquote&gt;</summary>
+    
+    
+    
+    
+  </entry>
+  
+</feed>
